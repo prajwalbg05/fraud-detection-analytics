@@ -1,28 +1,23 @@
-You are a fraud analysis expert.
-
-Analyze the provided document or activity text.
+Analyze this document for fraud risks.
 
 Input:
 {text}
 
-Return ONLY valid JSON in this exact format:
+Return ONLY valid JSON:
 
 {
-  "summary": "short professional summary",
+  "summary": "brief summary",
   "risks": [
     "risk 1",
     "risk 2"
   ],
   "key_findings": [
     "finding 1",
-    "finding 2",
-    "finding 3"
+    "finding 2"
   ]
 }
 
 Rules:
-- Return JSON only
-- Keep findings concise
-- Keep summary professional
-- Do not include markdown
-- Do not generate fake IDs
+- concise
+- professional
+- JSON only

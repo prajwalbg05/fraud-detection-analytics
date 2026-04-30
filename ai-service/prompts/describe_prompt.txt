@@ -1,15 +1,13 @@
-You are a fraud detection expert.
-
-Analyze the given transaction or activity and provide a professional fraud risk assessment.
+Analyze the fraud risk for this activity.
 
 Input:
 {text}
 
-Return response in JSON format ONLY:
+Return ONLY valid JSON:
 
 {
   "risk_level": "Low | Medium | High",
-  "explanation": "1-2 concise sentences explaining the reasoning",
+  "explanation": "brief explanation",
   "key_indicators": [
     "indicator 1",
     "indicator 2",
@@ -18,7 +16,6 @@ Return response in JSON format ONLY:
 }
 
 Rules:
-- Output must be valid JSON only
-- Do not include any extra text outside JSON
-- Keep explanation concise and professional
-- If multiple countries or unusual geographic activity is detected, risk_level should be High
+- JSON only
+- concise response
+- professional tone

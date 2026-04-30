@@ -7,15 +7,18 @@ import json
 import logging
 import time
 
+# =========================================================
 # 🔹 Services
+# =========================================================
 from services.chroma_client import query_documents
 from services.groq_client import generate_response
+from services.cache_client import cache
 
 describe_bp = Blueprint("describe", __name__)
 
 
 # =========================================================
-# 🔹 Utility: Load Prompt
+# 🔹 Utility: Load Describe Prompt
 # =========================================================
 def load_prompt():
     with open("prompts/describe_prompt.txt", "r") as file:
@@ -28,7 +31,8 @@ def load_prompt():
 def load_stream_prompt():
     with open("prompts/report_stream_prompt.txt", "r") as file:
         return file.read()
-    
+
+
 # =========================================================
 # 🔹 Utility: Load Analyse Document Prompt
 # =========================================================
@@ -55,32 +59,82 @@ def describe():
 
     logging.info(f"/describe called with input: {text}")
 
-    # 🔹 Load prompt
-    base_prompt = load_prompt().replace("{text}", text)
+    try:
 
-    # 🔹 RAG context
-    context_docs = query_documents(text)
+        # =====================================================
+        # 🔹 Safe Redis Cache Check
+        # =====================================================
+        try:
 
-    context = ""
+            cached_response = cache.get(text)
 
-    if context_docs and len(context_docs) > 0:
-        context = "\n".join(context_docs[0])
+            if cached_response:
 
-    # 🔹 Final prompt
-    final_prompt = f"""
-You are a fraud detection expert.
+                logging.info("Returning cached describe response")
 
+                return jsonify({
+                    "status": "success",
+                    "data": json.loads(cached_response),
+                    "source": "cache",
+                    "generated_at": datetime.utcnow().isoformat()
+                })
+
+        except Exception as cache_error:
+
+            logging.warning(
+                f"Redis cache unavailable: {cache_error}"
+            )
+
+        # =====================================================
+        # 🔹 Load Prompt
+        # =====================================================
+        base_prompt = load_prompt().replace("{text}", text)
+
+        # =====================================================
+        # 🔹 RAG Context
+        # =====================================================
+        context_docs = query_documents(text)
+
+        context = ""
+
+        if context_docs and len(context_docs) > 0:
+            context = "\n".join(context_docs[0])
+
+        # =====================================================
+        # 🔹 Final Prompt
+        # =====================================================
+        final_prompt = f"""
 Context:
 {context}
 
 {base_prompt}
 """
 
-    try:
-
+        # =====================================================
+        # 🔹 Generate AI Response
+        # =====================================================
         ai_output = generate_response(final_prompt)
 
         parsed_output = json.loads(ai_output)
+
+        # =====================================================
+        # 🔹 Safe Redis Cache Save
+        # =====================================================
+        try:
+
+            cache.set(
+                text,
+                json.dumps(parsed_output),
+                ex=300
+            )
+
+            logging.info("Response cached successfully")
+
+        except Exception as cache_error:
+
+            logging.warning(
+                f"Redis cache save failed: {cache_error}"
+            )
 
     except Exception as e:
 
@@ -159,7 +213,9 @@ def generate_report():
 
     logging.info(f"/generate-report called with input: {text}")
 
-    # 🔹 RAG context
+    # =====================================================
+    # 🔹 RAG Context
+    # =====================================================
     context_docs = query_documents(text)
 
     context = ""
@@ -167,17 +223,18 @@ def generate_report():
     if context_docs and len(context_docs) > 0:
         context = "\n".join(context_docs[0])
 
+    # =====================================================
     # 🔹 Prompt
+    # =====================================================
     prompt = f"""
-You are a fraud analysis expert.
-
 Context:
 {context}
 
-User Input:
+Generate a concise fraud report for:
+
 {text}
 
-Return JSON ONLY in this exact format:
+Return ONLY valid JSON:
 
 {{
   "title": "",
@@ -222,12 +279,18 @@ def generate_report_stream():
             "message": "text query parameter is required"
         }), 400
 
-    logging.info(f"/generate-report-stream called with input: {text}")
+    logging.info(
+        f"/generate-report-stream called with input: {text}"
+    )
 
-    # 🔹 Load stream prompt
+    # =====================================================
+    # 🔹 Load Prompt
+    # =====================================================
     base_prompt = load_stream_prompt().replace("{text}", text)
 
-    # 🔹 RAG context
+    # =====================================================
+    # 🔹 RAG Context
+    # =====================================================
     context_docs = query_documents(text)
 
     context = ""
@@ -235,7 +298,6 @@ def generate_report_stream():
     if context_docs and len(context_docs) > 0:
         context = "\n".join(context_docs[0])
 
-    # 🔹 Final prompt
     final_prompt = f"""
 Context:
 {context}
@@ -247,7 +309,9 @@ Context:
 
         ai_output = generate_response(final_prompt)
 
+        # =================================================
         # 🔹 Stream line-by-line
+        # =================================================
         def generate():
 
             lines = ai_output.split("\n")
@@ -267,13 +331,15 @@ Context:
 
     except Exception as e:
 
-        logging.error(f"/generate-report-stream error: {str(e)}")
+        logging.error(
+            f"/generate-report-stream error: {str(e)}"
+        )
 
         return jsonify({
             "status": "error",
             "message": "Streaming failed"
         }), 500
-    
+
 
 # =========================================================
 # 🔹 Endpoint 5: /analyse-document
@@ -291,12 +357,18 @@ def analyse_document():
 
     text = data["text"]
 
-    logging.info(f"/analyse-document called with input: {text}")
+    logging.info(
+        f"/analyse-document called with input: {text}"
+    )
 
-    # 🔹 Load prompt
+    # =====================================================
+    # 🔹 Load Prompt
+    # =====================================================
     base_prompt = load_analyse_prompt().replace("{text}", text)
 
-    # 🔹 RAG context
+    # =====================================================
+    # 🔹 RAG Context
+    # =====================================================
     context_docs = query_documents(text)
 
     context = ""
@@ -304,7 +376,6 @@ def analyse_document():
     if context_docs and len(context_docs) > 0:
         context = "\n".join(context_docs[0])
 
-    # 🔹 Final prompt
     final_prompt = f"""
 Context:
 {context}
@@ -320,7 +391,9 @@ Context:
 
     except Exception as e:
 
-        logging.error(f"/analyse-document error: {str(e)}")
+        logging.error(
+            f"/analyse-document error: {str(e)}"
+        )
 
         parsed_output = {
             "summary": "Unable to analyse document",
@@ -333,6 +406,7 @@ Context:
         "data": parsed_output
     })
 
+
 # =========================================================
 # 🔹 Endpoint 6: /batch-process
 # =========================================================
@@ -341,7 +415,6 @@ def batch_process():
 
     data = request.get_json()
 
-    # 🔹 Validate request
     if not data or "items" not in data:
         return jsonify({
             "status": "error",
@@ -350,21 +423,21 @@ def batch_process():
 
     items = data["items"]
 
-    # 🔹 Validate type
     if not isinstance(items, list):
         return jsonify({
             "status": "error",
             "message": "items must be an array"
         }), 400
 
-    # 🔹 Max 20 items
     if len(items) > 20:
         return jsonify({
             "status": "error",
             "message": "Maximum 20 items allowed"
         }), 400
 
-    logging.info(f"/batch-process called with {len(items)} items")
+    logging.info(
+        f"/batch-process called with {len(items)} items"
+    )
 
     results = []
 
@@ -372,10 +445,10 @@ def batch_process():
 
         try:
 
-            # 🔹 Delay 100ms
+            # 🔹 100ms delay
             time.sleep(0.1)
 
-            # 🔹 RAG context
+            # 🔹 RAG Context
             context_docs = query_documents(item)
 
             context = ""
@@ -384,7 +457,10 @@ def batch_process():
                 context = "\n".join(context_docs[0])
 
             # 🔹 Prompt
-            base_prompt = load_prompt().replace("{text}", item)
+            base_prompt = load_prompt().replace(
+                "{text}",
+                item
+            )
 
             final_prompt = f"""
 Context:
@@ -399,7 +475,9 @@ Context:
 
         except Exception as e:
 
-            logging.error(f"/batch-process item error: {str(e)}")
+            logging.error(
+                f"/batch-process item error: {str(e)}"
+            )
 
             parsed_output = {
                 "risk_level": "Unknown",
